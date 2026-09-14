@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: adquirente-config
+data:
+  APP_ENV: prod
+  LOG_LEVEL: info
+  KAFKA_BROKERS: kafka-bootstrap:9092
+  REDIS_ADDR: redis:6379
+  ISSUER_ADDR: issuer-sim:9090
+  VAULT_ADDR: vault:9090
+  OTLP_ENDPOINT: otel-collector.observability:4317
+  JWT_ISSUER: https://auth.adquirente.com
+  JWT_AUDIENCE: adquirente-api
+  JWT_PUBLIC_KEY_FILE: /etc/adquirente/jwt-public.pem
+  TLS_CERT_FILE: /etc/tls/tls.crt
+  TLS_KEY_FILE: /etc/tls/tls.key
+  TLS_CA_FILE: /etc/tls/ca.crt
+---
+# Exemplo de Secret (valores fictícios, base64). NUNCA commite um Secret real.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: adquirente-secrets
+type: Opaque
+stringData:
+  DATABASE_URL: postgres://user:senha@rds-host:5432/adquirente?sslmode=verify-full
+  WEBHOOK_SECRET: troque-me
+  VAULT_KEY_BASE64: troque-me

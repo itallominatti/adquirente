@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scheduler
+  labels: { app: scheduler }
+spec:
+  replicas: 2                       # 2 instâncias no mesmo consumer group dividem as partições
+  selector:
+    matchLabels: { app: scheduler }
+  template:
+    metadata:
+      labels: { app: scheduler }
+    spec:
+      serviceAccountName: scheduler
+      automountServiceAccountToken: false
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: scheduler
+          image: ghcr.io/itallominatti/adquirente-scheduler:1.0.0
+          envFrom:
+            - configMapRef: { name: adquirente-config }
+            - secretRef: { name: adquirente-secrets }
+          resources:
+            requests: { cpu: 100m, memory: 64Mi }
+            limits:   { cpu: 500m, memory: 256Mi }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: scheduler

@@ -1,0 +1,2 @@
+DROP SEQUENCE IF EXISTS nsu_seq;
+DROP TABLE IF EXISTS transactions;

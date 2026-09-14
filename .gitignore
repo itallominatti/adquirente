@@ -4,3 +4,7 @@ out/
 gen/
 *.exe
 GUIA.md
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan

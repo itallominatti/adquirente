@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: issuer-sim
+  labels: { app: issuer-sim }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: issuer-sim }
+  template:
+    metadata:
+      labels: { app: issuer-sim }
+    spec:
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: issuer-sim
+          image: ghcr.io/itallominatti/adquirente-issuer-sim:1.0.0
+          ports: [{ name: grpc, containerPort: 9090 }]
+          envFrom: [{ configMapRef: { name: adquirente-config } }]
+          env:
+            - { name: GRPC_ADDR, value: ":9090" }
+            - { name: ISSUER_SIM_LATENCY_MS, value: "50" }
+          volumeMounts: [{ name: tls, mountPath: /etc/tls, readOnly: true }]
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits:   { cpu: 200m, memory: 128Mi }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+      volumes:
+        - name: tls
+          secret: { secretName: issuer-sim-mtls }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: issuer-sim
+spec:
+  selector: { app: issuer-sim }
+  ports: [{ name: grpc, port: 9090, targetPort: grpc }]

@@ -1,0 +1,312 @@
+openapi: 3.1.0
+info:
+  title: Adquirente API
+  version: 1.0.0
+  description: |
+    API pública da adquirente: credenciamento, tokenização de cartão, autorização, agenda de recebíveis,
+    liquidações e antecipação. Todo POST que cria dinheiro ou movimento exige o header `Idempotency-Key`.
+    Erros seguem RFC 9457 (Problem Details); decida pelo campo `code`.
+servers:
+  - url: http://localhost:8080/v1
+security:
+  - bearerAuth: []
+
+paths:
+  /merchants:
+    post:
+      operationId: createMerchant
+      summary: Credencia um estabelecimento (nasce UNDER_REVIEW)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateMerchantRequest' }
+      responses:
+        '201': { description: Criado, content: { application/json: { schema: { $ref: '#/components/schemas/Merchant' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /merchants/{id}:
+    get:
+      operationId: getMerchant
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Merchant' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /merchants/{id}/approve:
+    post:
+      operationId: approveMerchant
+      summary: Conclui a análise (KYC). Exige scope merchants:approve.
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200': { description: Ativo, content: { application/json: { schema: { $ref: '#/components/schemas/Merchant' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /merchants/{id}/block:
+    post:
+      operationId: blockMerchant
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200': { description: Bloqueado, content: { application/json: { schema: { $ref: '#/components/schemas/Merchant' } } } }
+  /merchants/{id}/settings:
+    patch:
+      operationId: updateMerchantSettings
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                webhook_url: { type: string, format: uri, description: Só https; hosts privados são rejeitados }
+                auto_anticipation: { type: boolean }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Merchant' } } } }
+
+  /card-tokens:
+    post:
+      operationId: tokenizeCard
+      summary: Troca o número do cartão por um token (escopo PCI)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pan, expiry]
+              properties:
+                pan: { type: string, example: "4111111111111111" }
+                expiry: { type: string, example: "12/30" }
+      responses:
+        '201':
+          description: Token criado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string, example: tok_5f1c... }
+                  brand: { type: string, example: VISA }
+                  bin: { type: string, example: "411111" }
+                  last4: { type: string, example: "1111" }
+
+  /transactions:
+    post:
+      operationId: authorizeTransaction
+      summary: Autoriza uma transação de cartão
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuthorizeRequest' }
+      responses:
+        '201':
+          description: Transação criada (status AUTHORIZED ou DENIED — negativa não é erro HTTP)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Transaction' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/BusinessError' }
+        '503': { description: Emissor indisponível, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+  /transactions/{id}:
+    get:
+      operationId: getTransaction
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Transaction' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /transactions/{id}/capture:
+    post:
+      operationId: captureTransaction
+      parameters: [ { $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' } ]
+      responses:
+        '200': { description: Capturada, content: { application/json: { schema: { $ref: '#/components/schemas/Transaction' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /transactions/{id}/cancel:
+    post:
+      operationId: cancelTransaction
+      parameters: [ { $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' } ]
+      responses:
+        '200': { description: Cancelada, content: { application/json: { schema: { $ref: '#/components/schemas/Transaction' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /receivables:
+    get:
+      operationId: listReceivables
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [SCHEDULED, ANTICIPATED, SETTLED, CANCELED, CHARGEBACKED] } }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - { name: limit, in: query, schema: { type: integer, default: 100, maximum: 500 } }
+      responses:
+        '200':
+          description: Agenda
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Receivable' } }
+  /receivables/summary:
+    get:
+      operationId: receivablesSummary
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200': { description: Totais por dia e status }
+  /settlements:
+    get:
+      operationId: listSettlements
+      responses:
+        '200': { description: Liquidações do EC }
+
+  /anticipations/simulate:
+    post:
+      operationId: simulateAnticipation
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AnticipationRequest' } } }
+      responses:
+        '200': { description: Simulação, content: { application/json: { schema: { $ref: '#/components/schemas/Anticipation' } } } }
+        '422': { $ref: '#/components/responses/BusinessError' }
+  /anticipations:
+    post:
+      operationId: requestAnticipation
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AnticipationRequest' } } }
+      responses:
+        '201': { description: Contratada, content: { application/json: { schema: { $ref: '#/components/schemas/Anticipation' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/BusinessError' }
+  /anticipations/{id}:
+    get:
+      operationId: getAnticipation
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Anticipation' } } } }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string } }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: UUID gerado pelo cliente. Repetir a mesma chave com o mesmo corpo devolve a mesma resposta.
+      schema: { type: string, format: uuid }
+  schemas:
+    Problem:
+      type: object
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        code: { type: string, description: Código estável para o cliente decidir }
+    CreateMerchantRequest:
+      type: object
+      required: [document, legal_name, mcc, bank_account, fee_plan]
+      properties:
+        document: { type: string, example: "11.222.333/0001-81" }
+        legal_name: { type: string }
+        mcc: { type: string, example: "5462" }
+        bank_account:
+          type: object
+          required: [code, branch, number, kind]
+          properties:
+            code: { type: string, example: "341" }
+            branch: { type: string, example: "0001" }
+            number: { type: string, example: "12345-6" }
+            kind: { type: string, enum: [CHECKING, SAVINGS, PAYMENT] }
+        fee_plan:
+          type: object
+          properties:
+            debit_bps: { type: integer, example: 150 }
+            credit_bps: { type: integer, example: 250 }
+            credit_installments_bps: { type: object, additionalProperties: { type: integer }, example: { "2": 350, "12": 450 } }
+            anticipation_bps_month: { type: integer, example: 200 }
+        webhook_url: { type: string, format: uri }
+    Merchant:
+      type: object
+      properties:
+        id: { type: string }
+        document: { type: string, description: Mascarado }
+        legal_name: { type: string }
+        mcc: { type: string }
+        status: { type: string, enum: [UNDER_REVIEW, ACTIVE, BLOCKED] }
+        webhook_url: { type: string }
+        auto_anticipation: { type: boolean }
+        created_at: { type: string, format: date-time }
+    AuthorizeRequest:
+      type: object
+      required: [amount, product, installments, card_token]
+      properties:
+        amount: { type: integer, minimum: 1, description: Centavos, example: 120000 }
+        product: { type: string, enum: [DEBIT, CREDIT] }
+        installments: { type: integer, minimum: 1, maximum: 12 }
+        card_token: { type: string, description: Token do vault; nunca o PAN }
+    Transaction:
+      type: object
+      properties:
+        id: { type: string }
+        merchant_id: { type: string }
+        amount: { type: integer }
+        amount_formatted: { type: string, example: "R$ 1200,00" }
+        product: { type: string }
+        installments: { type: integer }
+        status: { type: string, enum: [PENDING, AUTHORIZED, DENIED, CAPTURED, CANCELED, SETTLED, CHARGEBACKED] }
+        authorization_code: { type: string }
+        nsu: { type: string }
+        response_code: { type: string, description: "00 aprovada; 51 saldo; 05 não honrar; 91 emissor indisponível" }
+        card_brand: { type: string }
+        card_last4: { type: string }
+        created_at: { type: string, format: date-time }
+        captured_at: { type: string, format: date-time }
+        canceled_at: { type: string, format: date-time }
+    Receivable:
+      type: object
+      properties:
+        id: { type: string }
+        transaction_id: { type: string }
+        installment_no: { type: integer }
+        installments: { type: integer }
+        gross_amount: { type: integer }
+        fee_amount: { type: integer }
+        net_amount: { type: integer }
+        due_date: { type: string, format: date }
+        status: { type: string }
+    AnticipationRequest:
+      type: object
+      required: [receivable_ids]
+      properties:
+        receivable_ids: { type: array, items: { type: string }, minItems: 1, maxItems: 500 }
+    Anticipation:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [SIMULATED, CONFIRMED] }
+        rate_bps_month: { type: integer }
+        gross_amount: { type: integer }
+        discount_amount: { type: integer }
+        net_amount: { type: integer }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              receivable_id: { type: string }
+              due_date: { type: string, format: date }
+              days: { type: integer }
+              net_amount: { type: integer }
+              present_value: { type: integer }
+              discount: { type: integer }
+  responses:
+    BadRequest: { description: Requisição malformada, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    Forbidden: { description: Sem permissão, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    NotFound: { description: Não encontrado, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    Conflict: { description: Estado ou idempotência em conflito, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    BusinessError: { description: Regra de negócio impediu, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }

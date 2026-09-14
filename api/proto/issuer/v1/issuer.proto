@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package issuer.v1;
+
+option go_package = "github.com/itallominatti/adquirente/gen/issuer/v1;issuerv1";
+
+// IssuerService representa o emissor (via bandeira). No estudo é simulado;
+// em produção este contrato seria substituído por um adapter ISO 8583.
+service IssuerService {
+  rpc Authorize(AuthorizeRequest) returns (AuthorizeResponse);
+  rpc Reverse(ReverseRequest) returns (ReverseResponse);
+}
+
+enum Product {
+  PRODUCT_UNSPECIFIED = 0;
+  PRODUCT_DEBIT = 1;
+  PRODUCT_CREDIT = 2;
+}
+
+message AuthorizeRequest {
+  string transaction_id = 1;
+  string pan = 2;            // em claro só neste canal (mTLS), nunca persistido
+  string expiry = 3;         // "MM/YY"
+  int64 amount = 4;          // centavos
+  string currency = 5;       // "BRL"
+  Product product = 6;
+  int32 installments = 7;
+  string merchant_mcc = 8;
+}
+
+message AuthorizeResponse {
+  bool approved = 1;
+  string authorization_code = 2;
+  string response_code = 3;  // "00" aprovada; "51" saldo; "05" não honrar; "91" indisponível
+}
+
+message ReverseRequest {
+  string transaction_id = 1;
+}
+
+message ReverseResponse {
+  bool accepted = 1;
+}

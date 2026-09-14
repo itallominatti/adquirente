@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vault
+  labels: { app: vault }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: vault }
+  template:
+    metadata:
+      labels: { app: vault }
+    spec:
+      serviceAccountName: vault
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: vault
+          image: ghcr.io/itallominatti/adquirente-vault:1.0.0
+          ports: [{ name: grpc, containerPort: 9090 }]
+          envFrom:
+            - configMapRef: { name: adquirente-config }
+            - secretRef: { name: adquirente-secrets }
+          env:
+            - { name: GRPC_ADDR, value: ":9090" }
+          volumeMounts:
+            - { name: tls, mountPath: /etc/tls, readOnly: true }
+          resources:
+            requests: { cpu: 100m, memory: 64Mi }
+            limits:   { cpu: 500m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+      volumes:
+        - name: tls
+          secret: { secretName: vault-mtls }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault
+spec:
+  selector: { app: vault }
+  ports: [{ name: grpc, port: 9090, targetPort: grpc }]
+---
+# A regra mais importante do PCI no cluster: SÓ a API fala com o vault. Nada mais.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vault-ingress
+spec:
+  podSelector:
+    matchLabels: { app: vault }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: api } }
+      ports: [{ protocol: TCP, port: 9090 }]
+  egress:
+    - to:                                   # só o banco do vault e o DNS
+        - ipBlock: { cidr: 10.0.0.0/8 }
+      ports:
+        - { protocol: TCP, port: 5432 }
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }

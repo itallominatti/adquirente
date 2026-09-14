@@ -1,0 +1,41 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: settlement
+spec:
+  schedule: "0 9 * * 1-5"            # 09:00 UTC = 06:00 em Brasília, segunda a sexta
+  timeZone: "America/Sao_Paulo"      # K8s ≥ 1.27: então pode usar "0 6 * * 1-5" diretamente
+  concurrencyPolicy: Forbid          # NUNCA duas liquidações ao mesmo tempo (o lock no Redis é a 2ª barreira)
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 7
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: settlement
+          automountServiceAccountToken: false
+          securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+          containers:
+            - name: settlement
+              image: ghcr.io/itallominatti/adquirente-settlement:1.0.0
+              envFrom:
+                - configMapRef: { name: adquirente-config }
+                - secretRef: { name: adquirente-secrets }
+              env:
+                - { name: SETTLEMENT_OUTPUT_DIR, value: /out }
+              volumeMounts: [{ name: out, mountPath: /out }]
+              resources:
+                requests: { cpu: 250m, memory: 128Mi }
+                limits:   { cpu: "1",  memory: 512Mi }
+              securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          volumes:
+            - name: out
+              emptyDir: {}            # em produção: os arquivos vão para o S3 (Parte 16), não para disco local
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: settlement

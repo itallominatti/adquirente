@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: adquirente
+resources:
+  - namespace.yaml
+  - config.yaml
+  - api.yaml
+  - vault.yaml
+  - issuer-sim.yaml
+  - scheduler.yaml
+  - notifier.yaml
+  - settlement-cronjob.yaml
+  - ingress.yaml

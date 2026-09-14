@@ -5,7 +5,7 @@ import "time"
 type Event interface {
 	EventID() string
 	EventType() string
-	OcurredAt() time.Time
+	OccurredAt() time.Time
 	AggregateID() string
 }
 

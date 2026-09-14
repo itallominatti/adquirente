@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notifier
+  labels: { app: notifier }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: notifier }
+  template:
+    metadata:
+      labels: { app: notifier }
+    spec:
+      serviceAccountName: notifier
+      automountServiceAccountToken: false
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: notifier
+          image: ghcr.io/itallominatti/adquirente-notifier:1.0.0
+          envFrom:
+            - configMapRef: { name: adquirente-config }
+            - secretRef: { name: adquirente-secrets }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits:   { cpu: 300m, memory: 256Mi }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: notifier
+---
+# O notifier é o ÚNICO pod que fala com a internet (webhooks dos ECs). Egress liberado só para ele.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: notifier-egress
+spec:
+  podSelector:
+    matchLabels: { app: notifier }
+  policyTypes: [Egress]
+  egress:
+    - to: [{ ipBlock: { cidr: 0.0.0.0/0, except: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.169.254/32"] } }]
+      ports: [{ protocol: TCP, port: 443 }]
+    - to: [{ ipBlock: { cidr: 10.0.0.0/8 } }]      # banco, kafka, dns internos

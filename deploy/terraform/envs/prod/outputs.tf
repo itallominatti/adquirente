@@ -1,0 +1,9 @@
+output "eks_cluster_name" { value = module.eks.cluster_name }
+output "ecr_repositories" { value = module.registry.repository_urls }
+output "rds_endpoints" { value = module.database.endpoints }
+output "redis_endpoint" { value = module.cache.primary_endpoint }
+output "msk_bootstrap_brokers_sasl_iam" { value = module.kafka.bootstrap_brokers_sasl_iam }
+output "acm_certificate_arn" { value = module.edge.certificate_arn }
+output "waf_web_acl_arn" { value = module.edge.web_acl_arn }
+output "settlement_bucket" { value = module.storage.settlement_bucket_name }
+output "alerts_topic_arn" { value = module.observability.alerts_topic_arn }
