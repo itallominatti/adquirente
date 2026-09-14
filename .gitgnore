@@ -1,0 +1,5 @@
+.env
+certs/
+out/
+gen/
+*.exe
