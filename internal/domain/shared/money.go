@@ -20,7 +20,7 @@ func (m Money) String() string {
 }
 
 func ApplyBps(gross Money, rate Bps) Money {
-	return Money(int64(gross) * int64(rate) / 1000)
+	return Money(int64(gross) * int64(rate) / 10000)
 }
 
 func Split(total Money, n int) []Money {
