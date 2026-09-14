@@ -31,3 +31,31 @@ func NewFeePlan(debit, creditOneShot shared.Bps, creditInstallments map[int]shar
 	}
 	return FeePlan{debit: debit, creditOneShot: creditOneShot, creditInstallments: rates, anticipationRateMonth: anticipationRateMonth}, nil
 }
+
+func (p FeePlan) MDR(product shared.Product, installments int) (shared.Bps, error) {
+	switch {
+	case product == shared.Debit && installments == 1:
+		return p.debit, nil
+	case product == shared.Credit && installments == 1:
+		return p.creditOneShot, nil
+	case product == shared.Credit && installments > 1:
+		bps, ok := p.creditInstallments[installments]
+		if !ok {
+			return 0, ErrInstallmentsNotAllowed
+		}
+		return bps, nil
+	}
+	return 0, ErrInstallmentsNotAllowed
+}
+
+func (p FeePlan) AnticipationRateMonth() shared.Bps { return p.anticipationRateMonth }
+func (p FeePlan) Debit() shared.Bps                 { return p.debit }
+func (p FeePlan) CreditOneShot() shared.Bps         { return p.creditOneShot }
+
+func (p FeePlan) CreditInstallments() map[int]shared.Bps {
+	out := make(map[int]shared.Bps, len(p.creditInstallments))
+	for k, v := range p.creditInstallments {
+		out[k] = v
+	}
+	return out
+}
