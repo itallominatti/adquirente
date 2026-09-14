@@ -3,4 +3,4 @@ certs/
 out/
 gen/
 *.exe
-*GUIA
+GUIA.md
