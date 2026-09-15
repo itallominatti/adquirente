@@ -1,0 +1,8 @@
+.git
+.env
+certs/
+out/
+GUIA.md
+*.exe
+deploy/terraform/
+deploy/k8s/

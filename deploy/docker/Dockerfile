@@ -1,10 +1,9 @@
 FROM golang:1.27 AS builder
 ARG SERVICE
 WORKDIR /src
-COPY go.mod go.sum ./
-RUN go mod download
+ENV GOFLAGS=-mod=vendor GOTOOLCHAIN=local CGO_ENABLED=0 GOOS=linux
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/app ./cmd/${SERVICE}
+RUN go build -trimpath -ldflags="-s -w" -o /out/app ./cmd/${SERVICE}
 
 FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /

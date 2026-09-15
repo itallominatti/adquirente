@@ -22,7 +22,7 @@ func SetupTracing(ctx context.Context, serviceName, endpoint string) (func(conte
 	if err != nil {
 		return nil, fmt.Errorf("criar exporter OTLP: %w", err)
 	}
-	res, err := resource.Merge(resource.Default(), resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceName(serviceName)))
+	res, err := resource.Merge(resource.Default(), resource.NewSchemaless(semconv.ServiceName(serviceName)))
 	if err != nil {
 		return nil, err
 	}

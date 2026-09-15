@@ -8,3 +8,4 @@ GUIA.md
 *.tfstate
 *.tfstate.*
 *.tfplan
+vendor/
